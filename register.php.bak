@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emad Store - Registration</title>
+    <link rel="stylesheet" href="styles/styles.css">
+</head>
+<body>
+
+<?php
+require "config.php";
+
+$message = "";
+$errors = [];
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $username = trim($_POST["username"]);
+    $email = trim($_POST["email"]);
+    $password = $_POST["password"];
+    $confirmPassword = $_POST["confirmPassword"];
+
+    // Username validation
+    if (empty($username)) {
+        $errors['username'] = "Username is required";
+    } elseif (strlen($username) < 3) {
+        $errors['username'] = "Username must be at least 3 characters long";
+    } elseif (strlen($username) > 20) {
+        $errors['username'] = "Username must be less than 20 characters";
+    } elseif (!preg_match('/^[a-zA-Z0-9_]+$/', $username)) {
+        $errors['username'] = "Username can only contain letters, numbers, and underscores";
+    }
+
+    // Email validation
+    if (empty($email)) {
+        $errors['email'] = "Email is required";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors['email'] = "Please enter a valid email address";
+    } elseif (strlen($email) > 100) {
+        $errors['email'] = "Email is too long";
+    }
+
+    // Password validation
+    if (empty($password)) {
+        $errors['password'] = "Password is required";
+    } elseif (strlen($password) < 8) {
+        $errors['password'] = "Password must be at least 8 characters long";
+    } elseif (strlen($password) > 50) {
+        $errors['password'] = "Password must be less than 50 characters";
+    } elseif (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/', $password)) {
+        $errors['password'] = "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&)";
+    }
+
+    // Confirm password validation
+    if (empty($confirmPassword)) {
+        $errors['confirmPassword'] = "Please confirm your password";
+    } elseif ($password !== $confirmPassword) {
+        $errors['confirmPassword'] = "Passwords do not match";
+    }
+
+    // If no validation errors, proceed with registration
+    if (empty($errors)) {
+        try {
+            // Check if account already exists using direct PDO
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :username OR email = :email");//2. البحث عن مستخدم موجود مسبقًا
+            $stmt->execute(['username' => $username, 'email' => $email]);
+            $existingUser = $stmt->fetch();//يرجع مصفوفة بيانات المستخدم
+
+            if ($existingUser) {
+                $message = "❌ Account already exists!";
+            } else {
+                // Insert new user using direct PDO
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $pdo->prepare("INSERT INTO users (username, email, password) VALUES (:username, :email, :password)");
+                $stmt->execute(['username' => $username, 'email' => $email, 'password' => $hashedPassword]);
+                
+                if ($stmt->rowCount() > 0) {
+                    header("Location: login.php");
+                    exit;
+                } else {
+                    $message = "❌ Registration failed. Please try again.";
+                }
+            }
+        } catch (PDOException $e) {
+            $message = "❌ Database error. Please try again later.";
+            // Log the error for debugging (in production, don't show detailed errors)
+            error_log("Registration error: " . $e->getMessage());
+        }
+    }
+}
+?>
+    <div class="container">
+        <div class="registration-form">
+            <h1>Emad Store</h1>
+            <h2>Create Your Account</h2>
+            <form id="registrationForm" action="register.php" method="post">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="username" value="<?= isset($_POST['username']) ? htmlspecialchars($_POST['username']) : '' ?>" required>
+                    <span class="error-message"><?= isset($errors['username']) ? $errors['username'] : '' ?></span>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : '' ?>" required>
+                    <span class="error-message"><?= isset($errors['email']) ? $errors['email'] : '' ?></span>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                    <span class="error-message"><?= isset($errors['password']) ? $errors['password'] : '' ?></span>
+                    <small style="color: #666; font-size: 12px;">Password must be at least 8 characters with uppercase, lowercase, number, and special character</small>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required>
+                    <span class="error-message"><?= isset($errors['confirmPassword']) ? $errors['confirmPassword'] : '' ?></span>
+                </div>
+                <div class="button-group">
+                    <button type="submit" id="registerBtn">Register Account</button>
+                    <button type="button" id="loginBtn">Login</button>
+                </div>
+                <p style="color:red;"><?= $message ?></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Client-side validation
+        document.getElementById('registrationForm').addEventListener('submit', function(e) {
+            let isValid = true;
+            const errors = {};
+
+            // Clear previous error messages
+            document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
+
+            // Username validation
+            const username = document.getElementById('name').value.trim();
+            if (username.length < 3) {
+                errors.username = 'Username must be at least 3 characters long';
+                isValid = false;
+            } else if (username.length > 20) {
+                errors.username = 'Username must be less than 20 characters';
+                isValid = false;
+            } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                errors.username = 'Username can only contain letters, numbers, and underscores';
+                isValid = false;
+            }
+
+            // Email validation
+            const email = document.getElementById('email').value.trim();
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                errors.email = 'Please enter a valid email address';
+                isValid = false;
+            }
+
+            // Password validation
+            const password = document.getElementById('password').value;
+            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+            if (password.length < 8) {
+                errors.password = 'Password must be at least 8 characters long';
+                isValid = false;
+            } else if (!passwordRegex.test(password)) {
+                errors.password = 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&)';
+                isValid = false;
+            }
+
+            // Confirm password validation
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            if (password !== confirmPassword) {
+                errors.confirmPassword = 'Passwords do not match';
+                isValid = false;
+            }
+
+            // Display errors
+            if (!isValid) {
+                e.preventDefault();
+                Object.keys(errors).forEach(field => {
+                    const errorElement = document.querySelector(`[name="${field}"]`).nextElementSibling;
+                    if (errorElement && errorElement.classList.contains('error-message')) {
+                        errorElement.textContent = errors[field];
+                    }
+                });
+            }
+        });
+
+        // Real-time password strength indicator
+        document.getElementById('password').addEventListener('input', function() {
+            const password = this.value;
+            const strength = {
+                length: password.length >= 8,
+                lowercase: /[a-z]/.test(password),
+                uppercase: /[A-Z]/.test(password),
+                number: /\d/.test(password),
+                special: /[@$!%*?&]/.test(password)
+            };
+
+            const strengthText = Object.values(strength).filter(Boolean).length;
+            let strengthMessage = '';
+            let strengthColor = '';
+
+            if (strengthText < 3) {
+                strengthMessage = 'Weak';
+                strengthColor = 'red';
+            } else if (strengthText < 5) {
+                strengthMessage = 'Medium';
+                strengthColor = 'orange';
+            } else {
+                strengthMessage = 'Strong';
+                strengthColor = 'green';
+            }
+
+            // Update strength indicator if it exists
+            const strengthIndicator = this.parentNode.querySelector('.password-strength');
+            if (!strengthIndicator) {
+                const indicator = document.createElement('small');
+                indicator.className = 'password-strength';
+                indicator.style.color = strengthColor;
+                indicator.textContent = `Password strength: ${strengthMessage}`;
+                this.parentNode.appendChild(indicator);
+            } else {
+                strengthIndicator.style.color = strengthColor;
+                strengthIndicator.textContent = `Password strength: ${strengthMessage}`;
+            }
+        });
+
+        // Login button functionality
+        document.getElementById('loginBtn').addEventListener('click', function() {
+            window.location.href = 'login.php';
+        });
+    </script>
+</body>
+</html> 
